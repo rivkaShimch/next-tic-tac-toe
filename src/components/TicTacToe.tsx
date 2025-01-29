@@ -4,10 +4,8 @@ import {
 } from '@mui/material';
 import GameStatus from './GameStatus';
 import Board from './Board';
-import dynamic from 'next/dynamic';
-const Confetti = dynamic(() => import('react-confetti'), {
-    ssr: false,
-})
+import ConfettiDisplay from './ConfettiDisplay';
+
 const base_url = "http://localhost:3002"
 
 const TicTacToe = () => {
@@ -21,7 +19,7 @@ const TicTacToe = () => {
     const [hardGame, setHardGame] = useState(false)
     const [width, setWidth] = useState<number>()
     const [height, setHeight] = useState<number>()
-    const [showConfetti, setShowConfetti] = useState(false);
+    // const [showConfetti, setShowConfetti] = useState(false);
 
     useEffect(() => {
         const storedEmail = localStorage.getItem('playerEmail');
@@ -35,7 +33,7 @@ const TicTacToe = () => {
         window.addEventListener('resize', () => {
             const handleResize = () => {
                 const heightWin = window.document.documentElement.scrollHeight - window.document.documentElement.clientHeight;
-                console.log(window.innerHeight, heightWin);
+                console.log("D",window.innerHeight, heightWin);
                 setWidth(window.innerWidth)
                 setHeight(window.document.documentElement.scrollHeight)
             }
@@ -50,16 +48,17 @@ const TicTacToe = () => {
             setRestartButton(false)
     }, [gameStatus])
 
-    useEffect(() => {
-        if (gameStatus === 'win') {
-            setShowConfetti(true);
-            // Stop confetti after 5 seconds
-            const timer = setTimeout(() => {
-                setShowConfetti(false);
-            }, 7000);
-            return () => clearTimeout(timer);
-        }
-    }, [gameStatus]);
+    // useEffect(() => {
+    //     if (gameStatus === 'win') {
+    //         console.log("in winnnn")
+    //         setShowConfetti(true);
+    //         // Stop confetti after 5 seconds
+    //         const timer = setTimeout(() => {
+    //             setShowConfetti(false);
+    //         }, 7000);
+    //         return () => clearTimeout(timer);
+    //     }
+    // }, [gameStatus]);
 
     const fetchGameState = async () => {
         try {
@@ -158,15 +157,11 @@ const TicTacToe = () => {
 
     return (
         <Box sx={{ maxWidth: 600, mx: 'auto', mt: 1, p: 1 }}>
-            {showConfetti && (
-                <Confetti
-                    width={width}
-                    height={height}
-                    recycle={false}
-                    numberOfPieces={1000}
-                    gravity={0.1}
-                />
-            )}
+            <ConfettiDisplay
+                gameStatus={gameStatus}
+                width={width}
+                height={height}
+            />
             <Card elevation={3}>
                 <CardContent>
                     <Typography variant="h4" gutterBottom align="center">
