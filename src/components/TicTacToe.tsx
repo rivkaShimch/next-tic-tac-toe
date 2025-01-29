@@ -1,17 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
-    Box,
-    Button,
-    Card,
-    CardContent,
-    TextField,
-    Typography,
-    Paper,
-    Stack,
+    Box, Button, Card, CardContent, TextField, Typography, Stack, ToggleButtonGroup, ToggleButton
 } from '@mui/material';
 import GameStatus from './GameStatus';
 import Board from './Board';
-
+import dynamic from 'next/dynamic';
+const Confetti = dynamic(() => import('react-confetti'), {
+    ssr: false,
+})
 const base_url = "http://localhost:3002"
 
 const TicTacToe = () => {
@@ -22,12 +18,48 @@ const TicTacToe = () => {
     const [isPlayerTurn, setIsPlayerTurn] = useState(true);
     const [error, setError] = useState('');
     const [restartButton, setRestartButton] = useState(false)
+    const [hardGame, setHardGame] = useState(false)
+    const [width, setWidth] = useState<number>()
+    const [height, setHeight] = useState<number>()
+    const [showConfetti, setShowConfetti] = useState(false);
 
+    useEffect(() => {
+        const storedEmail = localStorage.getItem('playerEmail');
+        if (storedEmail) {
+            setPlayerEmail(storedEmail);
+            setIsEmailValid(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(storedEmail));
+        }
+    }, []);
 
-    useEffect(()=>{
-        if(gameStatus!=="ongoing")
+    useEffect(() => {
+        window.addEventListener('resize', () => {
+            const handleResize = () => {
+                const heightWin = window.document.documentElement.scrollHeight - window.document.documentElement.clientHeight;
+                console.log(window.innerHeight, heightWin);
+                setWidth(window.innerWidth)
+                setHeight(window.document.documentElement.scrollHeight)
+            }
+
+            return () => {
+                window.removeEventListener('resize', handleResize);
+            };
+        })
+    }, [])
+    useEffect(() => {
+        if (gameStatus !== "ongoing")
             setRestartButton(false)
-    },[gameStatus])
+    }, [gameStatus])
+
+    useEffect(() => {
+        if (gameStatus === 'win') {
+            setShowConfetti(true);
+            // Stop confetti after 5 seconds
+            const timer = setTimeout(() => {
+                setShowConfetti(false);
+            }, 7000);
+            return () => clearTimeout(timer);
+        }
+    }, [gameStatus]);
 
     const fetchGameState = async () => {
         try {
@@ -40,8 +72,15 @@ const TicTacToe = () => {
     };
 
     const handleEmailChange = (newEmail: string) => {
-        setIsEmailValid(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail));
+        let isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)
+        setIsEmailValid(isValid);
         setPlayerEmail(newEmail)
+        if (isValid) {
+            localStorage.setItem('playerEmail', newEmail);
+            setRestartButton(false)
+            setBoard(Array(9).fill(null))
+            setGameStatus('')
+        }
     }
 
     const updateGameState = (gameData: { board: any[]; status: React.SetStateAction<string>; currentTurn: string; }) => {
@@ -63,11 +102,15 @@ const TicTacToe = () => {
             return;
         }
 
-        const row = Math.floor(index / 3);
-        const column = index % 3;
+        // Update player's move
+        const newBoard = [...board];
+        newBoard[index] = 'X';
+        setBoard(newBoard);
         setIsPlayerTurn(false)
-        try {
-            const response = await fetch(`${base_url}/api/gameplay?playerEmail=${playerEmail}`, {
+
+        const row = Math.floor(index / 3);
+        const column = index % 3; try {
+            const response = await fetch(`${base_url}/api/gameplay?playerEmail=${encodeURIComponent(playerEmail)}&hard=${encodeURIComponent(hardGame)}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -77,12 +120,6 @@ const TicTacToe = () => {
 
             const data = await response.json();
 
-            // Update player's move
-            const newBoard = [...board];
-            newBoard[index] = 'X';
-            setBoard(newBoard);
-
-            // If bot made a move, update that too
             if (data.botMove) {
                 const botIndex = data.botMove.row * 3 + data.botMove.column;
                 newBoard[botIndex] = 'O';
@@ -90,7 +127,6 @@ const TicTacToe = () => {
             }
 
             setGameStatus(data.status);
-            //setIsPlayerTurn(data.currentTurn === 'player');
         } catch (err) {
             setError('Failed to make move');
         }
@@ -121,14 +157,23 @@ const TicTacToe = () => {
     }
 
     return (
-        <Box sx={{ maxWidth: 600, mx: 'auto', mt: 4, p: 2 }}>
+        <Box sx={{ maxWidth: 600, mx: 'auto', mt: 1, p: 1 }}>
+            {showConfetti && (
+                <Confetti
+                    width={width}
+                    height={height}
+                    recycle={false}
+                    numberOfPieces={1000}
+                    gravity={0.1}
+                />
+            )}
             <Card elevation={3}>
                 <CardContent>
                     <Typography variant="h4" gutterBottom align="center">
                         Tic Tac Toe
                     </Typography>
 
-                    <Box sx={{ mb: 3 }}>
+                    <Box sx={{ mb: 2 }}>
                         <Stack direction="row" spacing={2}>
 
                             <Stack direction="row" spacing={2}>
@@ -154,13 +199,25 @@ const TicTacToe = () => {
                                     {restartButton ? "Restart" : "Start Game"}
                                 </Button>
                             </Stack>
+                            <ToggleButtonGroup
+                                value={hardGame}
+                                exclusive
+                                onChange={(_, value) => value !== null ? setHardGame(value) : ""}
+                                aria-label="difficulty level"
+                            >
+                                <ToggleButton value={false}>Easy</ToggleButton>
+                                <ToggleButton value={true}>Hard</ToggleButton>
+                            </ToggleButtonGroup>
                         </Stack>
-                    </Box>
-                    <Board isPlayerTurn={isPlayerTurn} board={board} handleCellClick={handleCellClick} />
 
+                    </Box>
                     <Box sx={{ textAlign: 'center' }}>
                         <GameStatus gameStatus={gameStatus} isPlayerTurn={isPlayerTurn} />
                     </Box>
+
+                    <Board isPlayerTurn={isPlayerTurn} board={board} handleCellClick={handleCellClick} />
+
+
                 </CardContent>
             </Card>
         </Box>

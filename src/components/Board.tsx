@@ -12,7 +12,7 @@ interface BoardPropsType {
 const Board = ({ board, isPlayerTurn, handleCellClick }:BoardPropsType) => {
     return (<Box
         sx={{
-            mb: 3,
+            mb: 1,
             display: 'flex',
             flexDirection: 'column',
             gap: 1
