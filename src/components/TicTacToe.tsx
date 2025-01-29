@@ -5,8 +5,7 @@ import {
 import GameStatus from './GameStatus';
 import Board from './Board';
 import ConfettiDisplay from './ConfettiDisplay';
-
-const base_url = "http://localhost:3002"
+import { gameService } from '../services/gameService';
 
 const TicTacToe = () => {
     const [board, setBoard] = useState(Array(9).fill(null));
@@ -19,8 +18,9 @@ const TicTacToe = () => {
     const [hardGame, setHardGame] = useState(false)
     const [width, setWidth] = useState<number>()
     const [height, setHeight] = useState<number>()
-    // const [showConfetti, setShowConfetti] = useState(false);
+    const [isGameStarted, setIsGameStarted] = useState(false)
 
+    
     useEffect(() => {
         const storedEmail = localStorage.getItem('playerEmail');
         if (storedEmail) {
@@ -33,7 +33,6 @@ const TicTacToe = () => {
         window.addEventListener('resize', () => {
             const handleResize = () => {
                 const heightWin = window.document.documentElement.scrollHeight - window.document.documentElement.clientHeight;
-                console.log("D",window.innerHeight, heightWin);
                 setWidth(window.innerWidth)
                 setHeight(window.document.documentElement.scrollHeight)
             }
@@ -44,29 +43,57 @@ const TicTacToe = () => {
         })
     }, [])
     useEffect(() => {
-        if (gameStatus !== "ongoing")
+        if (gameStatus !== "ongoing"){
             setRestartButton(false)
+            setIsGameStarted(false)
+        }
     }, [gameStatus])
 
-    // useEffect(() => {
-    //     if (gameStatus === 'win') {
-    //         console.log("in winnnn")
-    //         setShowConfetti(true);
-    //         // Stop confetti after 5 seconds
-    //         const timer = setTimeout(() => {
-    //             setShowConfetti(false);
-    //         }, 7000);
-    //         return () => clearTimeout(timer);
-    //     }
-    // }, [gameStatus]);
 
     const fetchGameState = async () => {
         try {
-            const response = await fetch(`${base_url}/api/game?playerEmail=${playerEmail}`);
-            const data = await response.json();
+            const data = await gameService.fetchGameState(playerEmail);
             updateGameState(data);
         } catch (err) {
             setError('Failed to fetch game state');
+        }
+    };
+
+    const handleCellClick = async (index: number) => {
+        if (!playerEmail || !isEmailValid || board[index] || !isPlayerTurn || gameStatus !== 'ongoing') {
+            return;
+        }
+
+        // Update player's move locally
+        const newBoard = [...board];
+        newBoard[index] = 'X';
+        setBoard(newBoard);
+        setIsPlayerTurn(false);
+
+        const row = Math.floor(index / 3);
+        const column = index % 3;
+
+        try {
+            const data = await gameService.makeMove(playerEmail, row, column, hardGame);
+
+            if (data.botMove) {
+                const botIndex = data.botMove.row * 3 + data.botMove.column;
+                newBoard[botIndex] = 'O';
+                setIsPlayerTurn(true);
+            }
+
+            setGameStatus(data.status);
+        } catch (err) {
+            setError('Failed to make move');
+        }
+    };
+
+    const handleRestartGame = async () => {
+        try {
+            const data = await gameService.restartGame(playerEmail);
+            updateGameState(data);
+        } catch (err) {
+            setError('Failed to restart the game');
         }
     };
 
@@ -94,41 +121,8 @@ const TicTacToe = () => {
         setBoard(newBoard);
         setGameStatus(gameData.status);
         setIsPlayerTurn(gameData.currentTurn === 'player');
-    };
-
-    const handleCellClick = async (index: number) => {
-        if (!playerEmail || !isEmailValid || board[index] || !isPlayerTurn || gameStatus !== 'ongoing') {
-            return;
-        }
-
-        // Update player's move
-        const newBoard = [...board];
-        newBoard[index] = 'X';
-        setBoard(newBoard);
-        setIsPlayerTurn(false)
-
-        const row = Math.floor(index / 3);
-        const column = index % 3; try {
-            const response = await fetch(`${base_url}/api/gameplay?playerEmail=${encodeURIComponent(playerEmail)}&hard=${encodeURIComponent(hardGame)}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ row, column }),
-            });
-
-            const data = await response.json();
-
-            if (data.botMove) {
-                const botIndex = data.botMove.row * 3 + data.botMove.column;
-                newBoard[botIndex] = 'O';
-                setIsPlayerTurn(true)
-            }
-
-            setGameStatus(data.status);
-        } catch (err) {
-            setError('Failed to make move');
-        }
+        setIsGameStarted(true)
+        
     };
 
     const startNewGame = async () => {
@@ -145,77 +139,65 @@ const TicTacToe = () => {
         setRestartButton(true)
     };
 
-    const handleRestartGame = async () => {
-        try {
-            const response = await fetch(`${base_url}/api/restart?playerEmail=${playerEmail}`);
-            const data = await response.json();
-            updateGameState(data);
-        } catch (err) {
-            setError('Failed to restart the game');
-        }
-    }
-
     return (
-        <Box sx={{ maxWidth: 600, mx: 'auto', mt: 1, p: 1 }}>
-            <ConfettiDisplay
-                gameStatus={gameStatus}
-                width={width}
-                height={height}
-            />
-            <Card elevation={3}>
-                <CardContent>
-                    <Typography variant="h4" gutterBottom align="center">
-                        Tic Tac Toe
-                    </Typography>
+        <Box className="tic-tac-toe-container">
+        <ConfettiDisplay
+            gameStatus={gameStatus}
+            width={width}
+            height={height}
+        />
+        <Card elevation={3}>
+            <CardContent>
+                <Typography variant="h4" className="game-title">
+                    Tic Tac Toe
+                </Typography>
 
-                    <Box sx={{ mb: 2 }}>
-                        <Stack direction="row" spacing={2}>
+                <div className="controls-container">
+                    <div className="game-controls">
+                        <TextField
+                            className="email-field"
+                            type="email"
+                            label="Email"
+                            variant="outlined"
+                            value={playerEmail}
+                            onChange={(e) => handleEmailChange(e.target.value)}
+                            error={!!error}
+                            helperText={error}
+                        />
+                        
+                        <ToggleButtonGroup
+                            value={hardGame}
+                            exclusive
+                            onChange={(_, value) => value !== null ? setHardGame(value) : ""}
+                            aria-label="difficulty level"
+                        >
+                            <ToggleButton value={false}>Easy</ToggleButton>
+                            <ToggleButton value={true}>Hard</ToggleButton>
+                        </ToggleButtonGroup>
 
-                            <Stack direction="row" spacing={2}>
+                        <Button
+                            variant="contained"
+                            className="start-button"
+                            onClick={() => restartButton ? handleRestartGame() : startNewGame()}
+                        >
+                            {restartButton ? "Restart" : "Start Game"}
+                        </Button>
+                    </div>
+                </div>
 
-                                <TextField
-                                    fullWidth
-                                    type="email"
-                                    label="Email"
-                                    variant="outlined"
-                                    value={playerEmail}
-                                    onChange={(e) => handleEmailChange(e.target.value)}
-                                    error={!!error}
-                                    helperText={error}
-                                />
-                            </Stack>
-                            <Stack direction="row" spacing={2}>
-                                <Button
-                                    fullWidth
-                                    variant="contained"
-                                    onClick={() => restartButton ? handleRestartGame() : startNewGame()}
-                                    sx={{ height: '56px' }}
-                                >
-                                    {restartButton ? "Restart" : "Start Game"}
-                                </Button>
-                            </Stack>
-                            <ToggleButtonGroup
-                                value={hardGame}
-                                exclusive
-                                onChange={(_, value) => value !== null ? setHardGame(value) : ""}
-                                aria-label="difficulty level"
-                            >
-                                <ToggleButton value={false}>Easy</ToggleButton>
-                                <ToggleButton value={true}>Hard</ToggleButton>
-                            </ToggleButtonGroup>
-                        </Stack>
+                <div className="game-status">
+                    <GameStatus gameStatus={gameStatus} isPlayerTurn={isPlayerTurn} />
+                </div>
 
-                    </Box>
-                    <Box sx={{ textAlign: 'center' }}>
-                        <GameStatus gameStatus={gameStatus} isPlayerTurn={isPlayerTurn} />
-                    </Box>
-
-                    <Board isPlayerTurn={isPlayerTurn} board={board} handleCellClick={handleCellClick} />
-
-
-                </CardContent>
-            </Card>
-        </Box>
+                <Board
+                    board={board}
+                    isPlayerTurn={isPlayerTurn}
+                    handleCellClick={handleCellClick}
+                    isGameStarted={isGameStarted}
+                />
+            </CardContent>
+        </Card>
+    </Box>
     );
 };
 
