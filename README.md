@@ -15,7 +15,7 @@ npm install
 
 2. Start the development server:
 
-npm start
+npm run dev
 
 ## Project Structure
 
